@@ -48,6 +48,8 @@ class ClaudeRemote {
       sessionSelect: document.getElementById('session-select'),
       newSessionBtn: document.getElementById('new-session-btn'),
       previewBtn: document.getElementById('preview-btn'),
+      attachBtn: document.getElementById('attach-btn'),
+      imageInput: document.getElementById('image-input'),
       toggleHeaderBtn: document.getElementById('toggle-header-btn'),
       expandHeaderBtn: document.getElementById('expand-header-btn'),
       terminalContainer: document.getElementById('terminal-container'),
@@ -216,6 +218,13 @@ class ClaudeRemote {
     });
     this.elements.newSessionBtn.addEventListener('click', () => this.showNewSessionModal());
     this.elements.previewBtn.addEventListener('click', () => this.showPreview());
+    this.elements.attachBtn.addEventListener('click', () => this.elements.imageInput.click());
+    this.elements.imageInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) {
+        this.handleImageAttachment(e.target.files[0]);
+        e.target.value = ''; // Reset for same file selection
+      }
+    });
     this.elements.toggleHeaderBtn.addEventListener('click', () => this.toggleHeader(true));
     this.elements.expandHeaderBtn.addEventListener('click', () => this.toggleHeader(false));
 
@@ -392,10 +401,33 @@ class ClaudeRemote {
         this.terminal.writeln(`\r\n\x1b[33mSession exited with code ${message.exitCode}\x1b[0m`);
         break;
 
+      case 'image:uploaded':
+        // Insert file path into terminal (simulating paste)
+        if (message.path) {
+          this.terminal.paste(message.path);
+        }
+        break;
+
       case 'error':
         this.terminal.writeln(`\r\n\x1b[31mError: ${message.error}\x1b[0m`);
         break;
     }
+  }
+
+  handleImageAttachment(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1]; // Remove data URL prefix
+      this.sendControl({
+        type: 'image:upload',
+        data: base64,
+        filename: file.name,
+        mimeType: file.type
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   updateSessionList(sessions) {

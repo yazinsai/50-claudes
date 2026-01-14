@@ -164,6 +164,10 @@ interface ControlMessage {
   sessionId?: string;
   cols?: number;
   rows?: number;
+  // Image upload
+  data?: string;
+  mimeType?: string;
+  filename?: string;
 }
 
 function handleControlMessage(ws: WebSocket, state: ClientState, message: ControlMessage) {
@@ -268,6 +272,25 @@ function handleControlMessage(ws: WebSocket, state: ClientState, message: Contro
       if (message.sessionId) {
         sessionManager.destroySession(message.sessionId);
         sendControl(ws, { type: 'session:destroyed', sessionId: message.sessionId });
+      }
+      break;
+    }
+
+    case 'image:upload': {
+      const { data, mimeType } = message;
+      if (!data) {
+        sendControl(ws, { type: 'error', error: 'No image data provided' });
+        break;
+      }
+      const ext = mimeType?.split('/')[1] || 'png';
+      const tempPath = path.join(os.tmpdir(), `claude-remote-${Date.now()}.${ext}`);
+
+      try {
+        const buffer = Buffer.from(data, 'base64');
+        fs.writeFileSync(tempPath, buffer);
+        sendControl(ws, { type: 'image:uploaded', path: tempPath });
+      } catch (err) {
+        sendControl(ws, { type: 'error', error: 'Failed to save image' });
       }
       break;
     }
