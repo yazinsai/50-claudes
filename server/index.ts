@@ -18,12 +18,29 @@ import { startTunnel } from './tunnel.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = parseInt(process.env.PORT || '3456', 10);
+const DEV_MODE = process.env.DEV_MODE === 'true';
 const sessionManager = new SessionManager();
 const portDetector = new PortDetector();
 
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
+
+// Livereload in dev mode
+if (DEV_MODE) {
+  const livereload = await import('livereload');
+  const connectLivereload = await import('connect-livereload');
+
+  const lrServer = livereload.default.createServer({
+    exts: ['html', 'css', 'js', 'ts'],
+    delay: 100,
+  });
+  lrServer.watch(path.join(__dirname, '../web'));
+  lrServer.watch(path.join(__dirname, '../server'));
+
+  app.use(connectLivereload.default());
+  console.log('\x1b[36m[Dev] Livereload enabled\x1b[0m');
+}
 
 // Serve static files (web frontend)
 app.use(express.static(path.join(__dirname, '../web')));
