@@ -49,6 +49,7 @@ class ClaudeRemote {
       newSessionBtn: document.getElementById('new-session-btn'),
       previewBtn: document.getElementById('preview-btn'),
       toggleHeaderBtn: document.getElementById('toggle-header-btn'),
+      expandHeaderBtn: document.getElementById('expand-header-btn'),
       terminalContainer: document.getElementById('terminal-container'),
 
       // Preview
@@ -170,7 +171,8 @@ class ClaudeRemote {
     });
     this.elements.newSessionBtn.addEventListener('click', () => this.showNewSessionModal());
     this.elements.previewBtn.addEventListener('click', () => this.showPreview());
-    this.elements.toggleHeaderBtn.addEventListener('click', () => this.toggleHeader());
+    this.elements.toggleHeaderBtn.addEventListener('click', () => this.toggleHeader(true));
+    this.elements.expandHeaderBtn.addEventListener('click', () => this.toggleHeader(false));
 
     // Preview
     this.elements.backBtn.addEventListener('click', () => this.hidePreview());
@@ -212,9 +214,14 @@ class ClaudeRemote {
     }
   }
 
-  toggleHeader() {
-    const isCollapsed = this.elements.header.classList.toggle('collapsed');
-    this.elements.toggleHeaderBtn.setAttribute('aria-expanded', !isCollapsed);
+  toggleHeader(collapse) {
+    const isCollapsed = collapse !== undefined
+      ? (collapse ? this.elements.header.classList.add('collapsed') || true : this.elements.header.classList.remove('collapsed') || false)
+      : this.elements.header.classList.toggle('collapsed');
+
+    const collapsed = this.elements.header.classList.contains('collapsed');
+    this.elements.toggleHeaderBtn.setAttribute('aria-expanded', !collapsed);
+    this.elements.expandHeaderBtn.classList.toggle('hidden', !collapsed);
     setTimeout(() => this.fitTerminal(), 300);
   }
 

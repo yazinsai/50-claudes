@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
@@ -22,6 +23,7 @@ const portDetector = new PortDetector();
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
 
 // Serve static files (web frontend)
 app.use(express.static(path.join(__dirname, '../web')));
@@ -90,8 +92,8 @@ app.get('/api/dirs', authMiddleware, (req, res) => {
   }
 });
 
-// Port proxy routes
-app.use('/preview', authMiddleware, createPortProxy());
+// Port proxy routes (handles its own auth with cookie support)
+app.use('/preview', createPortProxy());
 
 const server = createServer(app);
 

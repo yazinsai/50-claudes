@@ -386,10 +386,27 @@ body::before {
 #main-screen header.collapsed {
   transform: translateY(-100%);
   opacity: 0;
+  pointer-events: none;
+}
+
+/* Floating expand button */
+.floating-btn {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: max(0.5rem, env(safe-area-inset-top));
+  right: max(0.5rem, env(safe-area-inset-right));
+  z-index: 5;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+.floating-btn:not(.hidden) {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .header-left, .header-right {
