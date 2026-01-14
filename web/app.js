@@ -603,6 +603,10 @@ class ClaudeRemote {
 
       case 'session:list':
         this.updateSessionList(message.sessions);
+        // Auto-attach to first session if not already attached
+        if (!this.currentSessionId && message.sessions.length > 0) {
+          this.attachSession(message.sessions[0].id);
+        }
         break;
 
       case 'session:created':
