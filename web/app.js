@@ -653,11 +653,12 @@ class ClaudeRemote {
 
     // Detect keyboard visibility using visualViewport API
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', () => this.onViewportResize());
+      window.visualViewport.addEventListener('resize', () => this.onViewportChange());
+      window.visualViewport.addEventListener('scroll', () => this.onViewportChange());
     }
   }
 
-  onViewportResize() {
+  onViewportChange() {
     const viewport = window.visualViewport;
     const heightDiff = window.innerHeight - viewport.height;
 
@@ -667,9 +668,9 @@ class ClaudeRemote {
 
     if (keyboardOpen && this.elements.mainScreen.classList.contains('active')) {
       // Position toolbar just above the keyboard
-      // visualViewport.height is the visible area, keyboard height is the difference
-      const keyboardHeight = window.innerHeight - viewport.height;
-      this.elements.mobileKeys.style.bottom = `${keyboardHeight}px`;
+      // Account for visual viewport offset when page is scrolled
+      const keyboardHeight = window.innerHeight - viewport.height - viewport.offsetTop;
+      this.elements.mobileKeys.style.bottom = `${Math.max(0, keyboardHeight)}px`;
       this.showMobileKeys();
     } else {
       this.hideMobileKeys();
