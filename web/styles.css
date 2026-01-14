@@ -618,6 +618,9 @@ body::before {
 
 #terminal-container .xterm-viewport {
   overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 #terminal-container .xterm-viewport::-webkit-scrollbar {
