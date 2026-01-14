@@ -563,6 +563,16 @@ class ClaudeRemote {
 
       case 'session:exit':
         this.terminal.writeln(`\r\n\x1b[33mSession exited with code ${message.exitCode}\x1b[0m`);
+        // Auto-remove the session after it exits
+        if (message.sessionId) {
+          this.removeSession(message.sessionId);
+        }
+        break;
+
+      case 'session:destroyed':
+        if (message.sessionId) {
+          this.removeSession(message.sessionId);
+        }
         break;
 
       case 'image:uploaded':
@@ -609,12 +619,28 @@ class ClaudeRemote {
     const tabs = this.elements.sessionTabs;
     const currentValue = select.value;
 
+    // Count folder name occurrences to detect duplicates
+    const folderCounts = new Map();
+    for (const session of sessions) {
+      const dirName = session.cwd.split('/').pop() || session.cwd;
+      folderCounts.set(dirName, (folderCounts.get(dirName) || 0) + 1);
+    }
+
+    // Helper to get display name - just folder, or "ID folder" if duplicate
+    const getDisplayName = (session) => {
+      const dirName = session.cwd.split('/').pop() || session.cwd;
+      if (folderCounts.get(dirName) > 1) {
+        return `${session.id.slice(0, 3)} ${dirName}`;
+      }
+      return dirName;
+    };
+
     // Update dropdown (mobile)
     select.innerHTML = '<option value="">Select session...</option>';
     for (const session of sessions) {
       const option = document.createElement('option');
       option.value = session.id;
-      option.textContent = `${session.id.slice(0, 3)} - ${session.cwd.split('/').pop()}`;
+      option.textContent = getDisplayName(session);
       select.appendChild(option);
     }
 
@@ -623,19 +649,29 @@ class ClaudeRemote {
       tabs.innerHTML = '<span class="session-tab-empty">No sessions</span>';
     } else {
       tabs.innerHTML = sessions.map(session => {
-        const shortId = session.id.slice(0, 3);
-        const dirName = session.cwd.split('/').pop() || session.cwd;
         const isActive = session.id === this.currentSessionId;
         return `<button class="session-tab" role="tab" aria-selected="${isActive}" data-session-id="${session.id}">
-          <span class="session-tab-name">${shortId} - ${dirName}</span>
+          <span class="session-tab-name">${getDisplayName(session)}</span>
+          <span class="session-tab-close" data-close-session="${session.id}" title="Close session">&times;</span>
         </button>`;
       }).join('');
 
       // Add click handlers
       tabs.querySelectorAll('.session-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
+        tab.addEventListener('click', (e) => {
+          // Don't switch session if clicking close button
+          if (e.target.classList.contains('session-tab-close')) return;
           const sessionId = tab.dataset.sessionId;
           if (sessionId) this.attachSession(sessionId);
+        });
+      });
+
+      // Add close button handlers
+      tabs.querySelectorAll('.session-tab-close').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const sessionId = btn.dataset.closeSession;
+          if (sessionId) this.closeSession(sessionId);
         });
       });
     }
@@ -653,6 +689,28 @@ class ClaudeRemote {
     this.sendControl({ type: 'session:attach', sessionId });
     // Update tab selection immediately for responsive feel
     this.updateTabSelection(sessionId);
+  }
+
+  closeSession(sessionId) {
+    this.sendControl({ type: 'session:destroy', sessionId });
+  }
+
+  removeSession(sessionId) {
+    // Remove from local sessions list
+    this.sessions = this.sessions.filter(s => s.id !== sessionId);
+    this.updateSessionList(this.sessions);
+
+    // If we were attached to this session, clear the terminal
+    if (this.currentSessionId === sessionId) {
+      this.currentSessionId = null;
+      this.terminal.clear();
+      this.terminal.writeln('\x1b[33mSession closed.\x1b[0m');
+
+      // Auto-attach to another session if available
+      if (this.sessions.length > 0) {
+        this.attachSession(this.sessions[0].id);
+      }
+    }
   }
 
   updateTabSelection(sessionId) {
