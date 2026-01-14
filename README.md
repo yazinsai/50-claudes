@@ -1,107 +1,70 @@
 # Claude Code Remote
 
-Mobile-first remote access to Claude Code from your phone. Control your local Claude Code sessions, run commands, and preview local dev servers - all from anywhere.
-
-## Features
-
-- **Remote Chat**: Send messages to Claude Code from your phone
-- **Multiple Sessions**: Run and switch between multiple Claude Code sessions
-- **Port Preview**: View local dev servers (React, Vite, etc.) through the tunnel
-- **Quick Actions**: Tap buttons when Claude asks questions (AskUserQuestion prompts)
-- **Tool Output**: See file diffs, command results, and tool outputs
-- **PWA Support**: Install as an app on your phone
-
-## Quick Start
+Access Claude Code from your phone. Go for a walk, sit on the couch, or work from bed - your AI pair programmer comes with you.
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Start the server
 npm start
 ```
 
-The server will display:
-- Local URL: `http://localhost:3456`
-- Auth token (save this!)
-- Tunnel URL if cloudflared is installed
+That's it. Scan the QR code with your phone, and you're in.
 
-## Accessing Remotely
+---
 
-### Option 1: Cloudflared (Recommended)
+## What You Get
 
-Install cloudflared for automatic tunneling:
+**Full Terminal Access** - Not a chat wrapper. A real terminal. Everything Claude Code can do on your desktop, now in your pocket.
+
+**Session Persistence** - Start a session, put your phone down, come back later. Your work is still there.
+
+**Dev Server Preview** - Building a UI? Preview your local dev server right in the app. No tunnels to configure.
+
+**Works Anywhere** - Uses Cloudflare Tunnel automatically. No port forwarding, no firewall headaches.
+
+---
+
+## Getting Started
+
+```bash
+git clone https://github.com/yazinsai/claude-code-remote.git
+cd claude-code-remote
+npm install
+npm start
+```
+
+You'll see:
+
+```
+┌─────────────────────────────────────────┐
+│  Claude Code Remote                     │
+│  ─────────────────                      │
+│  Local:  http://localhost:3456          │
+│  Tunnel: https://abc123.trycloudflare.com│
+│                                         │
+│  Auth Token: xxxx-xxxx-xxxx             │
+│                                         │
+│  [QR CODE]                              │
+│                                         │
+│  Scan to connect from your phone        │
+└─────────────────────────────────────────┘
+```
+
+Scan the QR code. Enter the token. Done.
+
+---
+
+## Requirements
+
+- Node.js 18+
+- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) (optional, for remote access)
 
 ```bash
 # macOS
 brew install cloudflared
-
-# Linux
-# See https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/
-
-# Then just run the server - it will auto-tunnel
-npm start
 ```
 
-### Option 2: Manual Tunnel
+Without cloudflared, you can still use it locally or set up your own tunnel (ngrok, Tailscale, etc).
 
-If cloudflared isn't available, use any tunnel service:
-
-```bash
-# ngrok
-ngrok http 3456
-
-# localtunnel
-npx localtunnel --port 3456
-
-# Tailscale (if you have it set up)
-# Just access via your Tailscale IP
-```
-
-## Usage
-
-1. Start the server: `npm start`
-2. Copy the auth token shown in the terminal
-3. Open the tunnel URL on your phone
-4. Paste the auth token and connect
-5. Create a new session or attach to an existing one
-6. Start chatting with Claude Code!
-
-### Port Preview
-
-1. Start a local dev server (e.g., `npm run dev` in another terminal)
-2. Click the "Preview" button in the app
-3. Select the port from the dropdown
-4. The dev server will load in an iframe
-
-## Environment Variables
-
-- `PORT` - Server port (default: 3456)
-- `CLAUDE_REMOTE_TOKEN` - Custom auth token (default: randomly generated)
-
-## Development
-
-```bash
-# Watch mode
-npm run dev
-```
-
-## Architecture
-
-```
-┌──────────────────┐         ┌──────────────────────────────────────┐
-│   Mobile PWA     │◄──────► │  Local Server                        │
-│  (Your Phone)    │  WSS    │  (Your Computer)                     │
-└──────────────────┘         │                                      │
-                             │  ├── WebSocket API (chat)            │
-                             │  ├── PTY Manager (Claude sessions)   │
-                             │  ├── Port Proxy (dev server preview) │
-                             │  └── Tunnel (cloudflared)            │
-                             └──────────────────────────────────────┘
-```
+---
 
 ## License
 
