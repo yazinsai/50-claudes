@@ -50,6 +50,24 @@ class NotificationManager {
     }));
   }
 
+  // Apply preferences received from server (persists across different URLs)
+  applyFromServer(preferences) {
+    if (preferences && typeof preferences.notificationsEnabled === 'boolean') {
+      this.enabled = preferences.notificationsEnabled;
+      this.saveSettings(); // Also save locally as cache
+    }
+  }
+
+  // Sync preferences to server
+  syncToServer() {
+    if (this.app?.ws?.readyState === WebSocket.OPEN) {
+      this.app.sendControl({
+        type: 'preferences:set',
+        preferences: { notificationsEnabled: this.enabled }
+      });
+    }
+  }
+
   async requestPermission() {
     if (!('Notification' in window)) return false;
     if (Notification.permission === 'granted') return true;
@@ -64,6 +82,7 @@ class NotificationManager {
     if (granted) {
       this.enabled = true;
       this.saveSettings();
+      this.syncToServer();
     }
     return granted;
   }
@@ -71,6 +90,7 @@ class NotificationManager {
   disable() {
     this.enabled = false;
     this.saveSettings();
+    this.syncToServer();
   }
 
   isActiveSession(sessionId) {
@@ -589,6 +609,11 @@ class ClaudeRemote {
         localStorage.setItem('authToken', this.token);
         this.elements.reconnectBanner.classList.add('hidden');
         this.showScreen('main-screen');
+        // Apply server-side preferences (persists across different tunnel URLs)
+        if (message.preferences) {
+          this.notificationManager.applyFromServer(message.preferences);
+          this.updateNotifyToggleState();
+        }
         this.sendControl({ type: 'session:list' });
         this.loadPorts();
         this.fitTerminal();

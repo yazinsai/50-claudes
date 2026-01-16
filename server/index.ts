@@ -15,6 +15,7 @@ import { getAuthToken, validateToken, authMiddleware } from './auth.js';
 import { PortDetector } from './port-detector.js';
 import { createPortProxy } from './port-proxy.js';
 import { startTunnel } from './tunnel.js';
+import { loadPreferences, savePreferences } from './preferences.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -188,6 +189,8 @@ interface ControlMessage {
   data?: string;
   mimeType?: string;
   filename?: string;
+  // Preferences
+  preferences?: { notificationsEnabled?: boolean };
 }
 
 function handleControlMessage(ws: WebSocket, state: ClientState, message: ControlMessage) {
@@ -201,9 +204,18 @@ function handleControlMessage(ws: WebSocket, state: ClientState, message: Contro
     case 'auth': {
       if (message.token && validateToken(message.token)) {
         state.authenticated = true;
-        sendControl(ws, { type: 'auth:success' });
+        const preferences = loadPreferences();
+        sendControl(ws, { type: 'auth:success', preferences });
       } else {
         sendControl(ws, { type: 'auth:failed', error: 'Invalid token' });
+      }
+      break;
+    }
+
+    case 'preferences:set': {
+      if (message.preferences) {
+        const updated = savePreferences(message.preferences);
+        sendControl(ws, { type: 'preferences:updated', preferences: updated });
       }
       break;
     }
