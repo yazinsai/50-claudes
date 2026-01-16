@@ -1,5 +1,168 @@
 // Claude Code Remote - xterm.js Client
 
+// Touch Scroll Manager for natural momentum scrolling on mobile
+class TouchScrollManager {
+  constructor(terminal, container) {
+    this.terminal = terminal;
+    this.container = container;
+
+    // Physics constants
+    this.TIME_CONSTANT = 325; // ms - controls deceleration rate
+    this.VELOCITY_THRESHOLD = 10; // px/s - minimum velocity to trigger momentum
+    this.LINE_HEIGHT = 14; // pixels per line (matches terminal lineHeight * fontSize)
+
+    // State
+    this.tracking = false;
+    this.animating = false;
+    this.velocity = 0;
+    this.lastY = 0;
+    this.lastTime = 0;
+    this.accumulatedScroll = 0;
+
+    // Only activate on touch devices
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      this.bindEvents();
+    }
+  }
+
+  bindEvents() {
+    // Create an invisible overlay to capture touch events
+    this.overlay = document.createElement('div');
+    this.overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;z-index:10;touch-action:none;';
+    this.container.style.position = 'relative';
+    this.container.appendChild(this.overlay);
+
+    this.overlay.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+    this.overlay.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+    this.overlay.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: true });
+    this.overlay.addEventListener('touchcancel', () => {
+      this.tracking = false;
+    });
+  }
+
+  onTouchStart(e) {
+    // Stop any ongoing momentum animation
+    this.animating = false;
+
+    if (e.touches.length !== 1) return;
+
+    this.tracking = true;
+    this.velocity = 0;
+    this.accumulatedScroll = 0;
+    this.totalMovement = 0; // Track total movement to detect taps
+    this.startY = e.touches[0].clientY;
+    this.startX = e.touches[0].clientX;
+    this.lastY = this.startY;
+    this.lastTime = Date.now();
+    this.startTime = this.lastTime;
+  }
+
+  onTouchMove(e) {
+    if (!this.tracking || e.touches.length !== 1) return;
+
+    e.preventDefault(); // Prevent page bounce
+
+    const currentY = e.touches[0].clientY;
+    const currentTime = Date.now();
+    const deltaY = this.lastY - currentY;
+    const deltaTime = currentTime - this.lastTime;
+
+    // Track total movement to distinguish taps from swipes
+    this.totalMovement += Math.abs(deltaY);
+
+    if (deltaTime > 0) {
+      // Exponential smoothing for velocity
+      const instantVelocity = (deltaY / deltaTime) * 1000; // px/s
+      this.velocity = 0.8 * instantVelocity + 0.2 * this.velocity;
+    }
+
+    // Accumulate scroll and apply when we have enough for a line
+    this.accumulatedScroll += deltaY;
+    const linesToScroll = Math.trunc(this.accumulatedScroll / this.LINE_HEIGHT);
+
+    if (linesToScroll !== 0) {
+      this.terminal.scrollLines(linesToScroll);
+      this.accumulatedScroll -= linesToScroll * this.LINE_HEIGHT;
+    }
+
+    this.lastY = currentY;
+    this.lastTime = currentTime;
+  }
+
+  onTouchEnd(e) {
+    if (!this.tracking) return;
+    this.tracking = false;
+
+    const duration = Date.now() - this.startTime;
+    const TAP_THRESHOLD = 10; // pixels
+    const TAP_DURATION = 300; // ms
+
+    // If minimal movement and short duration, treat as tap and focus terminal
+    if (this.totalMovement < TAP_THRESHOLD && duration < TAP_DURATION) {
+      // Hide overlay briefly to allow tap through
+      this.overlay.style.pointerEvents = 'none';
+
+      // Find element under the tap and click it
+      const elem = document.elementFromPoint(this.startX, this.startY);
+      if (elem) {
+        elem.focus();
+        // Also trigger a click for good measure
+        elem.click();
+      }
+
+      // Restore overlay
+      setTimeout(() => {
+        this.overlay.style.pointerEvents = '';
+      }, 100);
+      return;
+    }
+
+    // Start momentum animation if velocity exceeds threshold
+    if (Math.abs(this.velocity) > this.VELOCITY_THRESHOLD) {
+      this.startMomentum();
+    }
+  }
+
+  startMomentum() {
+    this.animating = true;
+    const startTime = Date.now();
+    const startVelocity = this.velocity;
+    let accumulatedDistance = 0;
+    let scrolledLines = 0;
+
+    const animate = () => {
+      if (!this.animating) return;
+
+      const elapsed = Date.now() - startTime;
+      // Exponential decay: v(t) = v0 * e^(-t/τ)
+      const currentVelocity = startVelocity * Math.exp(-elapsed / this.TIME_CONSTANT);
+
+      // Stop when velocity is too low
+      if (Math.abs(currentVelocity) < this.VELOCITY_THRESHOLD) {
+        this.animating = false;
+        return;
+      }
+
+      // Calculate total distance scrolled using integral of velocity
+      // ∫v0*e^(-t/τ)dt = -v0*τ*e^(-t/τ) + v0*τ
+      const totalDistance = startVelocity * this.TIME_CONSTANT * (1 - Math.exp(-elapsed / this.TIME_CONSTANT)) / 1000;
+
+      // Convert to lines and scroll the delta
+      const totalLines = Math.trunc(totalDistance / this.LINE_HEIGHT);
+      const linesToScroll = totalLines - scrolledLines;
+
+      if (linesToScroll !== 0) {
+        this.terminal.scrollLines(linesToScroll);
+        scrolledLines = totalLines;
+      }
+
+      requestAnimationFrame(animate);
+    };
+
+    requestAnimationFrame(animate);
+  }
+}
+
 // Notification Manager for input-required alerts
 class NotificationManager {
   constructor(app) {
@@ -405,6 +568,12 @@ class ClaudeRemote {
     this.terminal.onScroll(() => this.updateScrollButton());
     // Also check when new content is written
     this.terminal.onWriteParsed(() => this.updateScrollButton());
+
+    // Initialize touch scroll manager for natural mobile scrolling
+    this.touchScrollManager = new TouchScrollManager(
+      this.terminal,
+      this.elements.terminalContainer
+    );
   }
 
   fitTerminal() {

@@ -1158,7 +1158,12 @@ body::before {
 /* Touch-friendly terminal */
 @media (pointer: coarse) {
   #terminal-container .xterm-screen {
-    touch-action: pan-y pinch-zoom;
+    touch-action: none; /* Let TouchScrollManager handle touch */
+  }
+
+  #terminal-container .xterm-viewport {
+    -webkit-overflow-scrolling: auto;
+    overflow-y: hidden !important;
   }
 
   .btn-icon {
