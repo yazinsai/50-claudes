@@ -63,10 +63,35 @@ Scan the QR code. Done.
 - [Bun](https://bun.sh)
 - [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) (optional, for remote access)
 
+### macOS
+
 ```bash
-# macOS
 brew install cloudflared
 ```
+
+### Linux (Ubuntu/Debian)
+
+Linux requires build tools to compile the native terminal module.
+
+```bash
+# Install bun (official installer - recommended)
+curl -fsSL https://bun.sh/install | bash
+
+# Install build dependencies
+sudo apt install -y build-essential python3
+
+# Install node-gyp (choose based on your Node.js source):
+# - NodeSource Node.js (node -v shows v18+, v20+, v22+, etc.):
+sudo npm install -g node-gyp
+# - Distribution Node.js (apt install nodejs):
+sudo apt install -y node-gyp
+
+# Install dependencies and run
+bun install
+bun start
+```
+
+> **Note:** The `bun-js` snap has confinement restrictions that prevent native module compilation and loading. Use the official bun installer instead.
 
 Without cloudflared, you can still use it locally or set up your own tunnel (ngrok, Tailscale, etc).
 
