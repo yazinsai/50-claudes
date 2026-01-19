@@ -32,12 +32,14 @@ export class PtySession extends EventEmitter {
   private outputHistory: string = '';
   private static readonly MAX_HISTORY_SIZE = 100000; // ~100KB of history
   private status: 'running' | 'stopped' = 'stopped';
+  private args: string[];
 
-  constructor(id: string, cwd: string) {
+  constructor(id: string, cwd: string, args: string[] = []) {
     super();
     this.id = id;
     this.cwd = cwd;
     this.createdAt = new Date();
+    this.args = args;
   }
 
   getInfo(): SessionInfo {
@@ -112,7 +114,7 @@ export class PtySession extends EventEmitter {
     // Find claude binary using multiple strategies
     const claudePath = PtySession.findClaudeBinary();
 
-    this.pty = pty.spawn(claudePath, [], {
+    this.pty = pty.spawn(claudePath, this.args, {
       name: 'xterm-256color',
       cols: 120,
       rows: 40,

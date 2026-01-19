@@ -312,6 +312,7 @@ class ClaudeRemote {
     this.fitAddon = null;
     this.currentSessionId = null;
     this.sessions = [];
+    this.externalSessions = [];
 
     // Check URL for token first, then localStorage
     const urlParams = new URLSearchParams(window.location.search);
@@ -595,7 +596,21 @@ class ClaudeRemote {
 
     // Main
     this.elements.sessionSelect.addEventListener('change', (e) => {
-      if (e.target.value) this.attachSession(e.target.value);
+      const value = e.target.value;
+      if (!value) return;
+
+      // Check if it's an external session
+      if (value.startsWith('external:')) {
+        const pid = parseInt(value.replace('external:', ''), 10);
+        const external = this.externalSessions.find(s => s.pid === pid);
+        if (external) {
+          this.adoptExternalSession(external.pid, external.cwd);
+          // Reset dropdown
+          e.target.value = this.currentSessionId || '';
+        }
+      } else {
+        this.attachSession(value);
+      }
     });
     this.elements.newSessionBtn.addEventListener('click', () => this.showNewSessionModal());
     this.elements.previewBtn.addEventListener('click', () => this.showPreview());
@@ -784,6 +799,7 @@ class ClaudeRemote {
           this.updateNotifyToggleState();
         }
         this.sendControl({ type: 'session:list' });
+        this.sendControl({ type: 'session:discover' });
         this.loadPorts();
         this.fitTerminal();
         // Re-attach to previous session if we have one
@@ -806,13 +822,24 @@ class ClaudeRemote {
         }
         break;
 
+      case 'session:discovered':
+        this.updateExternalSessions(message.sessions || []);
+        break;
+
       case 'session:created':
       case 'session:attached':
         this.currentSessionId = message.session.id;
         this.terminal.clear();
         this.terminal.writeln(`\x1b[32mConnected to session: ${message.session.id}\x1b[0m`);
         this.terminal.writeln(`\x1b[90mWorking directory: ${message.session.cwd}\x1b[0m\r\n`);
+        if (message.isAdopted) {
+          this.terminal.writeln(`\x1b[36m✓ External session adopted successfully\x1b[0m\r\n`);
+        }
         this.sendControl({ type: 'session:list' });
+        // Refresh external sessions after adoption
+        if (message.isAdopted) {
+          this.sendControl({ type: 'session:discover' });
+        }
         // Send initial size
         const { cols, rows } = this.terminal;
         this.sendControl({ type: 'resize', cols, rows });
@@ -872,6 +899,12 @@ class ClaudeRemote {
     reader.readAsDataURL(file);
   }
 
+  updateExternalSessions(externalSessions) {
+    this.externalSessions = externalSessions;
+    // Re-render the session list to include external sessions
+    this.updateSessionList(this.sessions);
+  }
+
   updateSessionList(sessions) {
     this.sessions = sessions;
     const select = this.elements.sessionSelect;
@@ -909,11 +942,28 @@ class ClaudeRemote {
       select.appendChild(option);
     }
 
+    // Add external sessions to dropdown
+    if (this.externalSessions.length > 0) {
+      const separator = document.createElement('option');
+      separator.disabled = true;
+      separator.textContent = '── External Sessions ──';
+      select.appendChild(separator);
+
+      for (const external of this.externalSessions) {
+        const option = document.createElement('option');
+        option.value = `external:${external.pid}`;
+        option.textContent = `📍 ${getFolderName(external.cwd)}`;
+        option.style.fontStyle = 'italic';
+        option.style.opacity = '0.8';
+        select.appendChild(option);
+      }
+    }
+
     // Update tabs (desktop)
-    if (sessions.length === 0) {
+    if (sessions.length === 0 && this.externalSessions.length === 0) {
       tabs.innerHTML = '<span class="session-tab-empty">No sessions</span>';
     } else {
-      tabs.innerHTML = sessions.map(session => {
+      let tabsHtml = sessions.map(session => {
         const isActive = session.id === this.currentSessionId;
         return `<button class="session-tab" role="tab" aria-selected="${isActive}" data-session-id="${session.id}">
           <span class="session-tab-name">${getDisplayName(session)}</span>
@@ -921,13 +971,34 @@ class ClaudeRemote {
         </button>`;
       }).join('');
 
-      // Add click handlers
-      tabs.querySelectorAll('.session-tab').forEach(tab => {
+      // Add external sessions
+      if (this.externalSessions.length > 0) {
+        tabsHtml += this.externalSessions.map(external => {
+          return `<button class="session-tab session-tab-external" role="tab" aria-selected="false" data-external-pid="${external.pid}" data-external-cwd="${external.cwd}">
+          <span class="session-tab-name">📍 ${getFolderName(external.cwd)}</span>
+          <span class="session-tab-pid" title="Process ID ${external.pid}">PID ${external.pid}</span>
+        </button>`;
+        }).join('');
+      }
+
+      tabs.innerHTML = tabsHtml;
+
+      // Add click handlers for regular sessions
+      tabs.querySelectorAll('.session-tab:not(.session-tab-external)').forEach(tab => {
         tab.addEventListener('click', (e) => {
           // Don't switch session if clicking close button
           if (e.target.classList.contains('session-tab-close')) return;
           const sessionId = tab.dataset.sessionId;
           if (sessionId) this.attachSession(sessionId);
+        });
+      });
+
+      // Add click handlers for external sessions (adoption)
+      tabs.querySelectorAll('.session-tab-external').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const pid = parseInt(tab.dataset.externalPid, 10);
+          const cwd = tab.dataset.externalCwd;
+          if (pid && cwd) this.adoptExternalSession(pid, cwd);
         });
       });
 
@@ -954,6 +1025,15 @@ class ClaudeRemote {
     this.sendControl({ type: 'session:attach', sessionId });
     // Update tab selection immediately for responsive feel
     this.updateTabSelection(sessionId);
+  }
+
+  adoptExternalSession(pid, cwd) {
+    const folderName = cwd.split('/').filter(Boolean).pop() || cwd;
+    if (confirm(`Adopt external Claude session in "${folderName}"?\n\nThis will kill the external process (PID ${pid}) and resume it here with --continue flag.`)) {
+      this.terminal.clear();
+      this.terminal.writeln('\x1b[90mAdopting external session...\x1b[0m');
+      this.sendControl({ type: 'session:adopt', pid, cwd });
+    }
   }
 
   closeSession(sessionId) {

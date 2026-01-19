@@ -597,6 +597,25 @@ body::before {
   font-style: italic;
 }
 
+.session-tab-external {
+  opacity: 0.75;
+  font-style: italic;
+  border-style: dashed;
+}
+
+.session-tab-external:hover {
+  opacity: 1;
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.session-tab-pid {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
 /* Responsive: Mobile/Desktop visibility */
 .mobile-only {
   display: block;

@@ -191,6 +191,8 @@ interface ControlMessage {
   filename?: string;
   // Preferences
   preferences?: { notificationsEnabled?: boolean };
+  // External session adoption
+  pid?: number;
 }
 
 function handleControlMessage(ws: WebSocket, state: ClientState, message: ControlMessage) {
@@ -264,6 +266,69 @@ function handleControlMessage(ws: WebSocket, state: ClientState, message: Contro
 
     case 'session:list': {
       sendControl(ws, { type: 'session:list', sessions: sessionManager.listSessions() });
+      break;
+    }
+
+    case 'session:discover': {
+      // Discover external Claude Code sessions
+      sessionManager.discoverExternalSessions()
+        .then(externalSessions => {
+          sendControl(ws, { type: 'session:discovered', sessions: externalSessions });
+        })
+        .catch(err => {
+          sendControl(ws, { type: 'error', error: `Failed to discover sessions: ${err.message}` });
+        });
+      break;
+    }
+
+    case 'session:adopt': {
+      // Adopt an external Claude session
+      const { pid, cwd } = message;
+      if (!pid || !cwd) {
+        sendControl(ws, { type: 'error', error: 'Missing pid or cwd' });
+        break;
+      }
+
+      // Clean up previous session handlers if any
+      cleanupSessionHandlers(state);
+
+      sessionManager.adoptExternalSession(pid, cwd)
+        .then(session => {
+          state.sessionId = session.id;
+
+          // Subscribe to session output - send as raw text
+          state.outputHandler = ({ raw, parsed }: { raw: string; parsed: ParsedOutput[] }) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(raw); // Send as text (not binary)
+
+              // Notify on ask_user events (input required)
+              if (parsed?.some((p: ParsedOutput) => p.type === 'ask_user')) {
+                const askEvent = parsed.find((p: ParsedOutput) => p.type === 'ask_user');
+                sendControl(ws, {
+                  type: 'session:input_required',
+                  sessionId: session.id,
+                  sessionName: session.getInfo().cwd.split('/').pop(),
+                  preview: askEvent?.content?.slice(0, 150) || 'Input needed',
+                });
+              }
+            }
+          };
+          session.on('output', state.outputHandler);
+
+          state.exitHandler = (code: number) => {
+            sendControl(ws, { type: 'session:exit', sessionId: session.id, exitCode: code });
+          };
+          session.on('exit', state.exitHandler);
+
+          sendControl(ws, {
+            type: 'session:created',
+            session: session.getInfo(),
+            isAdopted: true,
+          });
+        })
+        .catch(err => {
+          sendControl(ws, { type: 'error', error: `Failed to adopt session: ${err.message}` });
+        });
       break;
     }
 
