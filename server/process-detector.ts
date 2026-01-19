@@ -14,9 +14,9 @@ export interface ExternalProcessInfo {
 
 export class ProcessDetector {
   /**
-   * Detect external Claude Code processes running on the system
+   * Detect external Claude Code CLI processes running on the system
    * @param excludePids PIDs to exclude (processes managed by this server)
-   * @returns Array of external Claude processes
+   * @returns Array of external Claude CLI processes
    */
   async detectClaudeProcesses(excludePids: Set<number> = new Set()): Promise<ExternalProcessInfo[]> {
     const results: ExternalProcessInfo[] = [];
@@ -24,30 +24,48 @@ export class ProcessDetector {
     const currentUser = process.env.USER || process.env.USERNAME || '';
 
     try {
-      // Find Claude processes owned by current user
-      const { stdout } = await execAsync('ps aux | grep -E "[c]laude" | grep -v grep');
-      const lines = stdout.trim().split('\n').filter(line => line.length > 0);
+      // Use ps with specific columns for reliable parsing
+      // Filter for running processes only (not zombies)
+      const { stdout } = await execAsync('ps -axo user,pid,stat,command');
+      const lines = stdout.trim().split('\n').slice(1); // Skip header
 
       for (const line of lines) {
-        const parts = line.split(/\s+/);
-        if (parts.length < 11) continue;
+        // Parse the line carefully - command can contain spaces
+        const match = line.match(/^(\S+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+        if (!match) continue;
+
+        const [, processUser, pidStr, stat, fullCommand] = match;
+        const pid = parseInt(pidStr, 10);
 
         // Security: Only include processes owned by current user
-        const processUser = parts[0];
         if (currentUser && processUser !== currentUser) continue;
 
-        const pid = parseInt(parts[1], 10);
+        // Skip zombie or terminated processes (state contains Z)
+        if (stat.includes('Z')) continue;
+
         if (isNaN(pid) || excludePids.has(pid)) continue;
 
         // Skip the current process
         if (pid === process.pid) continue;
 
-        // Extract command and args
-        const commandIndex = parts.findIndex(p => p.includes('claude'));
-        if (commandIndex === -1) continue;
+        // Check if this is specifically the Claude CLI binary
+        // The command should be exactly "claude" or end with "/claude" (the binary)
+        // Exclude Claude.app (desktop app) and any other processes with "claude" in path
+        const commandParts = fullCommand.trim().split(/\s+/);
+        const executable = commandParts[0];
 
-        const command = parts[commandIndex];
-        const args = parts.slice(commandIndex + 1);
+        // Only match the Claude CLI binary specifically
+        // - Exactly "claude"
+        // - Path ending in "/claude" (e.g., /usr/local/bin/claude)
+        // Exclude Claude.app and similar (contains .app or Claude Helper)
+        const isClaudeCLI = (
+          executable === 'claude' ||
+          (executable.endsWith('/claude') && !executable.includes('.app'))
+        );
+
+        if (!isClaudeCLI) continue;
+
+        const args = commandParts.slice(1);
 
         // Get working directory
         let cwd: string | null = null;
@@ -62,7 +80,7 @@ export class ProcessDetector {
           results.push({
             pid,
             cwd,
-            command,
+            command: executable,
             args,
           });
         }
