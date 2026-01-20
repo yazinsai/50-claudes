@@ -473,6 +473,13 @@ class ClaudeRemote {
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
       const optKey = e.altKey;
 
+      // Handle Shift+Enter to insert newline instead of sending
+      if (e.key === 'Enter' && e.shiftKey && !cmdKey && !optKey) {
+        e.preventDefault();
+        this.ws.send('\n');
+        return false;
+      }
+
       if (cmdKey && !e.shiftKey) {
         switch (e.key) {
           case 'Backspace':
@@ -669,6 +676,9 @@ class ClaudeRemote {
     this.elements.settingsBtn.addEventListener('click', () => this.showSettings());
     this.elements.closeSettingsBtn.addEventListener('click', () => this.hideSettings());
     this.elements.notifyToggle.addEventListener('click', () => this.toggleNotifications());
+
+    // Paste handling for images
+    document.addEventListener('paste', (e) => this.handlePaste(e));
   }
 
   showScreen(screenId) {
@@ -899,6 +909,39 @@ class ClaudeRemote {
       });
     };
     reader.readAsDataURL(file);
+  }
+
+  handlePaste(e) {
+    // Only handle paste when connected and on main screen
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.elements.mainScreen.classList.contains('active')) {
+      return;
+    }
+
+    // Check if clipboard contains image data
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // Check if it's an image
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+
+        const file = item.getAsFile();
+        if (file) {
+          // Generate a filename with timestamp
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const ext = item.type.split('/')[1];
+          const filename = `pasted-image-${timestamp}.${ext}`;
+
+          // Create a new file with the generated name
+          const namedFile = new File([file], filename, { type: item.type });
+          this.handleImageAttachment(namedFile);
+        }
+        break;
+      }
+    }
   }
 
   updateExternalSessions(externalSessions) {
