@@ -47,10 +47,14 @@ export class SessionManager {
    * @returns Array of external Claude processes not managed by this server
    */
   async discoverExternalSessions(): Promise<ExternalProcessInfo[]> {
-    // Get PIDs of sessions managed by this server (not yet available in PtySession)
-    // For now, we'll return all Claude processes - the client can handle duplicates
+    // Get PIDs of sessions managed by this server
     const managedPids = new Set<number>();
-    // TODO: Track PTY process PIDs if needed for filtering
+    for (const session of this.sessions.values()) {
+      const pid = session.getPid();
+      if (pid !== null) {
+        managedPids.add(pid);
+      }
+    }
 
     const externalProcesses = await this.processDetector.detectClaudeProcesses(managedPids);
     return externalProcesses;

@@ -171,6 +171,10 @@ export class PtySession extends EventEmitter {
     }
   }
 
+  getPid(): number | null {
+    return this.pty?.pid ?? null;
+  }
+
   private parseOutput(data: string): ParsedOutput[] {
     const results: ParsedOutput[] = [];
     // Strip ANSI for pattern matching only (raw is preserved for colored rendering)
