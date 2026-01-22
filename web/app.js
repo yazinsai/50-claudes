@@ -220,6 +220,18 @@ class NotificationManager {
     if (preferences && typeof preferences.notificationsEnabled === 'boolean') {
       this.enabled = preferences.notificationsEnabled;
       this.saveSettings(); // Also save locally as cache
+
+      // Auto-prompt for permission if server says enabled but browser hasn't granted yet
+      // This handles the case of new tunnel URLs where permission needs re-granting
+      if (this.enabled && Notification.permission === 'default') {
+        this.requestPermission().then(granted => {
+          if (!granted) {
+            // User denied on this origin - disable to avoid repeated prompts
+            this.enabled = false;
+            this.saveSettings();
+          }
+        });
+      }
     }
   }
 
@@ -317,6 +329,7 @@ class ClaudeRemote {
     this.sessions = [];
     this.externalSessions = [];
     this.sessionCache = new Map(); // Cache terminal content per session for instant switching
+    this.reconnectInterval = null;
 
     // Check URL for token first, then localStorage
     const urlParams = new URLSearchParams(window.location.search);
@@ -386,8 +399,7 @@ class ClaudeRemote {
       createSessionBtn: document.getElementById('create-session-btn'),
 
       // Reconnect
-      reconnectBanner: document.getElementById('reconnect-banner'),
-      reconnectBtn: document.getElementById('reconnect-btn'),
+      reconnectIndicator: document.getElementById('reconnect-indicator'),
 
       // Mobile keys
       mobileKeys: document.getElementById('mobile-keys'),
@@ -674,9 +686,6 @@ class ClaudeRemote {
       setTimeout(() => this.hideSuggestions(), 150);
     });
 
-    // Reconnect
-    this.elements.reconnectBtn.addEventListener('click', () => this.reconnect());
-
     // Scroll to bottom
     this.elements.scrollBottomBtn.addEventListener('click', () => this.scrollToBottom());
 
@@ -787,18 +796,35 @@ class ClaudeRemote {
     };
 
     this.ws.onclose = () => {
-      if (this.elements.mainScreen.classList.contains('active')) {
-        this.terminal.writeln('\r\n\x1b[33mDisconnected.\x1b[0m');
-        this.elements.reconnectBanner.classList.remove('hidden');
-      }
       this.elements.connectBtn.disabled = false;
       this.elements.connectBtn.classList.remove('loading');
+      if (this.elements.mainScreen.classList.contains('active')) {
+        this.startAutoReconnect();
+      }
     };
   }
 
-  reconnect() {
-    this.elements.reconnectBanner.classList.add('hidden');
-    this.terminal.writeln('\x1b[90mReconnecting...\x1b[0m');
+  startAutoReconnect() {
+    if (this.reconnectInterval) return;
+    this.elements.reconnectIndicator.classList.remove('hidden');
+    this.reconnectInterval = setInterval(() => this.attemptReconnect(), 3000);
+    // Try immediately first
+    this.attemptReconnect();
+  }
+
+  stopAutoReconnect() {
+    if (this.reconnectInterval) {
+      clearInterval(this.reconnectInterval);
+      this.reconnectInterval = null;
+    }
+    this.elements.reconnectIndicator.classList.add('hidden');
+  }
+
+  attemptReconnect() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.stopAutoReconnect();
+      return;
+    }
     this.connect();
   }
 
@@ -814,7 +840,7 @@ class ClaudeRemote {
     switch (message.type) {
       case 'auth:success':
         localStorage.setItem('authToken', this.token);
-        this.elements.reconnectBanner.classList.add('hidden');
+        this.stopAutoReconnect();
         this.showScreen('main-screen');
         // Apply server-side preferences (persists across different tunnel URLs)
         if (message.preferences) {
