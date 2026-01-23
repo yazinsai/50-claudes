@@ -14,13 +14,15 @@ import type { ParsedOutput } from './pty-session.js';
 import { getAuthToken, validateToken, authMiddleware } from './auth.js';
 import { PortDetector } from './port-detector.js';
 import { createPortProxy } from './port-proxy.js';
-import { startTunnel } from './tunnel.js';
+import { startTunnel, type TunnelResult } from './tunnel/index.js';
 import { loadPreferences, savePreferences } from './preferences.js';
+import { parseConfig } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT = parseInt(process.env.PORT || '3456', 10);
-const DEV_MODE = process.env.DEV_MODE === 'true';
+const config = parseConfig();
+const PORT = config.port;
+const DEV_MODE = config.devMode;
 const sessionManager = new SessionManager();
 const portDetector = new PortDetector();
 
@@ -443,6 +445,9 @@ function cleanupSessionHandlers(state: ClientState) {
   state.exitHandler = null;
 }
 
+// Track tunnel for cleanup
+let tunnelResult: TunnelResult | null = null;
+
 // Start server
 server.listen(PORT, async () => {
   const token = getAuthToken();
@@ -452,22 +457,27 @@ server.listen(PORT, async () => {
   console.log('=================================\n');
   console.log(`Local: http://localhost:${PORT}?token=${token}`);
 
-  // Start tunnel if available
-  const tunnelUrl = await startTunnel(PORT);
-  const connectUrl = tunnelUrl
-    ? `${tunnelUrl}?token=${token}`
+  // Start tunnel based on config
+  tunnelResult = await startTunnel(PORT, config.tunnelType);
+  const connectUrl = tunnelResult.url
+    ? `${tunnelResult.url}?token=${token}`
     : `http://localhost:${PORT}?token=${token}`;
 
   console.log(`\nScan to connect:\n`);
   qrcode.generate(connectUrl, { small: true });
 
-  if (tunnelUrl) {
-    console.log(`\nPublic: ${connectUrl}`);
+  if (tunnelResult.url) {
+    if (tunnelResult.isPrivate) {
+      console.log(`\nTailnet: ${connectUrl}`);
+      console.log('(Accessible only to your Tailscale network)');
+    } else {
+      console.log(`\nPublic: ${connectUrl}`);
+    }
   } else {
-    console.log('\nNo tunnel. Install cloudflared:');
-    console.log('  brew install cloudflared');
-    console.log('\nThen run:');
-    console.log(`  cloudflared tunnel --url http://localhost:${PORT}`);
+    console.log('\nNo tunnel available. Options:');
+    console.log('  --tunnel=tailscale-serve  (requires Tailscale)');
+    console.log('  --tunnel=tailscale-funnel (requires Tailscale + Funnel enabled)');
+    console.log('  --tunnel=cloudflare       (requires cloudflared)');
   }
 
   console.log('\n=================================\n');
@@ -476,6 +486,7 @@ server.listen(PORT, async () => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
+  tunnelResult?.cleanup();
   sessionManager.destroyAll();
   server.close();
   process.exit(0);
