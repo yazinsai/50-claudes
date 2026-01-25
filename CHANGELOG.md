@@ -6,9 +6,11 @@ All notable changes to Claude Code Remote are documented here.
 
 ### Added
 - Busy/idle activity status indicators for sessions - animated spinner for busy, static dot for idle
+- Activity indicators now shown for external sessions in mobile dropdown
 
 ### Fixed
 - Cache proxy middlewares to prevent EventEmitter memory leak
+- External sessions in mobile dropdown now show activity status instead of pin emoji
 
 ---
 

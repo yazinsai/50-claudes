@@ -956,7 +956,7 @@ class ClaudeRemote {
 
       case 'session:status':
         // Update activity status for sessions without full re-render
-        this.updateSessionStatus(message.sessions);
+        this.updateSessionStatus(message.sessions, message.externalSessions);
         break;
 
       case 'error':
@@ -1071,9 +1071,12 @@ class ClaudeRemote {
       for (const external of this.externalSessions) {
         const option = document.createElement('option');
         option.value = `external:${external.pid}`;
-        option.textContent = `📍 ${getFolderName(external.cwd)}`;
-        option.style.fontStyle = 'italic';
-        option.style.opacity = '0.8';
+        const indicator = external.activityStatus === 'busy'
+          ? SPINNER_FRAMES[this.spinnerFrame]
+          : '●';
+        option.textContent = `${indicator} ${getFolderName(external.cwd)}`;
+        option.dataset.status = external.activityStatus || 'unknown';
+        option.dataset.externalCwd = external.cwd;
         select.appendChild(option);
       }
     }
@@ -1626,12 +1629,21 @@ class ClaudeRemote {
   }
 
   // Update session activity status without full re-render
-  updateSessionStatus(sessions) {
+  updateSessionStatus(sessions, externalSessions) {
     // Update stored session data
     for (const session of sessions) {
       const existing = this.sessions.find(s => s.id === session.id);
       if (existing) {
         existing.activityStatus = session.activityStatus;
+      }
+    }
+    // Update external sessions data
+    if (externalSessions) {
+      for (const external of externalSessions) {
+        const existing = this.externalSessions.find(s => s.pid === external.pid);
+        if (existing) {
+          existing.activityStatus = external.activityStatus;
+        }
       }
     }
     // Update status indicators in the DOM
@@ -1655,18 +1667,34 @@ class ClaudeRemote {
       }
     });
 
-    // Update dropdown options
+    // Update dropdown options (both regular and external sessions)
     const options = this.elements.sessionSelect.querySelectorAll('option');
     options.forEach(option => {
       const sessionId = option.value;
-      if (!sessionId || sessionId.startsWith('external:')) return;
+      if (!sessionId) return;
+
+      // Handle external sessions
+      if (sessionId.startsWith('external:')) {
+        const cwd = option.dataset.externalCwd;
+        const external = this.externalSessions.find(s => s.cwd === cwd);
+        if (external) {
+          const indicator = external.activityStatus === 'busy'
+            ? SPINNER_FRAMES[this.spinnerFrame]
+            : '●';
+          const folderName = cwd.split('/').filter(Boolean).pop() || cwd;
+          option.textContent = `${indicator} ${folderName}`;
+          option.dataset.status = external.activityStatus || 'unknown';
+        }
+        return;
+      }
+
+      // Handle regular sessions
       const session = this.sessions.find(s => s.id === sessionId);
       if (session) {
         const indicator = session.activityStatus === 'busy'
           ? SPINNER_FRAMES[this.spinnerFrame]
           : '●';
         const statusClass = session.activityStatus || 'unknown';
-        // Update option text with indicator
         const baseName = this.getDisplayName(session);
         option.textContent = `${indicator} ${baseName}`;
         option.dataset.status = statusClass;

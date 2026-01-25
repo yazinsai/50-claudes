@@ -129,9 +129,10 @@ interface ClientState {
 }
 
 // Broadcast activity status to all authenticated clients every 5 seconds
-setInterval(() => {
+setInterval(async () => {
   const sessions = sessionManager.listSessions();
-  const statusMessage = JSON.stringify({ type: 'session:status', sessions });
+  const externalSessions = await sessionManager.discoverExternalSessions();
+  const statusMessage = JSON.stringify({ type: 'session:status', sessions, externalSessions });
   const statusBuffer = Buffer.from(statusMessage);
 
   wss.clients.forEach((client) => {
