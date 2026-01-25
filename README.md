@@ -32,6 +32,7 @@ That's it. Scan the QR code and you're in.
 git clone https://github.com/yazinsai/claude-code-remote.git
 cd claude-code-remote
 bun install
+bun run build
 bun start
 ```
 

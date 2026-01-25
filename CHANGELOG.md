@@ -11,6 +11,7 @@ All notable changes to Claude Code Remote are documented here.
 ### Fixed
 - Cache proxy middlewares to prevent EventEmitter memory leak
 - External sessions in mobile dropdown now show activity status instead of pin emoji
+- README missing build step before start command (fixes #3)
 
 ---
 
